@@ -1,0 +1,2 @@
+# rpmcd
+RPM change directory

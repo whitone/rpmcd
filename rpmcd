@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+# rpmcd - rpm change directory
+# usage: rpmcd [-d] [-v] [-l|rpmdir]
+#
+# Copyright 2010 Stefano Cotta Ramusino
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+function rpmcd_function {
+
+    # to debug: rpmcd -d
+    [ "$1" == "-d" ] && { set -x; shift; }
+
+    unset rpmcd_function verbose
+
+    [ "$(type -p rpm &>/dev/null; echo $?)" != "0" ] && { echo "rpmcd requires rpm" 1>&2; set +x; return 1; }
+
+    [ "$1" == "-v" ] && { verbose=1; shift; }
+
+    [ "$1" ] && [ "$(echo $1 | cut -b1)" == "-" ] && { \
+      [ "$1" == "-l" ] && { \
+          echo "Available rpmdirs:"; \
+          #[ "$verbose" ] && { unset verbose; echo "rpm --showrc | cut -f2 -d: | grep \" _[a-z]*dir[^}]\" | cut -f1 | sed \"s, _,- ,;s,dir,,\" | sort"; }; \
+          rpm --showrc | cut -f2 -d: | grep " _[^_].*dir[^}]" | cut -f1 | sed "s, _,- ,;s,_,/,;s,/*dir,," | sort; \
+          unset verbose; \
+          set +x; \
+	  return 0; } \
+      || { \
+	  echo -e "rpmcd: $1: invalid option\nrpmcd: usage: rpmcd [-v] [-l|rpmdir]" 1>&2; \
+          unset verbose; \
+	  set +x; \
+          return 1; }; \
+    }
+
+    [ "$1" ] && rpmcd_destdir=$(echo $1|tr A-Z a-z) || rpmcd_destdir="spec"
+
+    rpmcd_found=0
+    for i in $(rpm --showrc | cut -f2 -d: | grep " _[^_].*dir[^}]" | cut -f1 | sed "s, _,,;s,_,/,;s,dir,,")
+    do
+      [ "$i" == "$rpmcd_destdir" ] && rpmcd_destdir=$(echo $rpmcd_destdir|sed "s,/,_,") && rpmcd_found=1 && break
+      [ "$i/" == "$rpmcd_destdir" ] && rpmcd_destdir=$(echo "$i/"|sed "s,/,_,") && rpmcd_found=1 && break
+    done
+
+    [ "$rpmcd_found" == "0" ] && { \
+      unset rpmcd_found verbose; \
+      echo -e "rpmcd: $1: rpmdir not found\nTo list all available rpmdirs type: rpmcd -l" 1>&2; \
+      set +x; \
+      return 1; };
+
+    unset rpmcd_found
+
+    [ "$verbose" ] && { unset verbose; echo "cd $(rpm --eval %_${rpmcd_destdir}dir)"; }
+    rpmcd_destdir=$(rpm --eval %_${rpmcd_destdir}dir)
+
+    [ ! -d $rpmcd_destdir ] && { \
+      echo -e "rpmcd: $1: $rpmcd_destdir: No such file or directory" 1>&2; \
+      unset rpmcd_destdir verbose; \
+      set +x; \
+      return 1; };
+    
+    cd $rpmcd_destdir
+
+    unset rpmcd_destdir verbose
+
+    set +x
+
+    return 0
+
+}
+
+rpmcd_function $@
+
+# do NOT put here exit 0!!!
